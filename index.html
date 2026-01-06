@@ -5,83 +5,84 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>正在载入...</title>
     <style>
-        /* 使用国内镜像加速艺术字体加载 */
-        @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap');
-
+        @import url('https://fonts.font.im/css2?family=Ma+Shan+Zheng&display=swap');
         :root { --paper: #f4ecd8; --ink: #1a1a1a; --vermilion: #b22222; --gold: #b89b5e; }
-        
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Kaiti", "STKaiti", "楷体", serif; }
 
         #viewport { position: relative; width: 100%; height: 100%; overflow: hidden; }
 
-        /* 背景堆叠 - 开启 GPU 加速 */
+        /* 背景容器层 */
         #bg-container { position: absolute; width: 100%; height: 100%; z-index: 1; }
         .bg-layer {
-            position: absolute; width: 115%; height: 115%; top: -7.5%; left: -7.5%;
-            background-size: cover; background-position: center;
+            position: absolute; width: 100%; height: 100%;
             opacity: 0; visibility: hidden; pointer-events: none;
-            will-change: transform; /* 告诉浏览器提前准备 GPU */
+            display: flex; align-items: center; justify-content: center;
         }
         .bg-layer.active { opacity: 1; visibility: visible; z-index: 2; }
 
-        /* 黑场遮罩 */
-        #black-overlay {
-            position: absolute; inset: 0; background: #000;
-            opacity: 0; z-index: 5; pointer-events: none;
-            transition: opacity 0.45s ease-in-out;
+        /* --- 核心适配逻辑 --- */
+
+        /* 默认：宽屏/横屏模式（保持 cover 充满全屏） */
+        .bg-blur { display: none; } /* 宽屏不需要模糊底 */
+        .bg-main {
+            width: 115%; height: 115%; /* 略微溢出以供动画位移 */
+            background-size: cover; 
+            background-position: center;
+            transition: opacity 0.5s;
         }
+
+        /* 窄屏/竖屏模式（自动切换为模糊衬底 + contain） */
+        @media (max-aspect-ratio: 1/1) or (max-width: 768px) {
+            .bg-blur {
+                display: block;
+                position: absolute; width: 120%; height: 120%;
+                background-size: cover; background-position: center;
+                filter: blur(30px) brightness(0.5);
+            }
+            .bg-main {
+                width: 100%; height: 100%;
+                background-size: contain; /* 保证不被裁切 */
+                background-repeat: no-repeat;
+                z-index: 3;
+            }
+        }
+
+        /* 动画逻辑 */
+        .zoom-move .bg-main { animation: zoomMain 30s infinite alternate ease-in-out; }
+        .pan-move .bg-main { animation: panMain 30s infinite alternate ease-in-out; }
+        @keyframes zoomMain { from { transform: scale(1); } to { transform: scale(1.1); } }
+        @keyframes panMain { from { transform: translateX(-3%); } to { transform: translateX(3%); } }
+
+        /* UI 元素 */
+        #black-overlay { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 5; pointer-events: none; transition: opacity 0.4s; }
         #black-overlay.fading { opacity: 1; }
 
-        /* 动画预设 */
-        .zoom-move { animation: zoomMove 30s infinite alternate ease-in-out; }
-        .pan-move { animation: panMove 30s infinite alternate ease-in-out; }
-        @keyframes zoomMove { from { transform: scale(1) translateZ(0); } to { transform: scale(1.15) translateZ(0); } }
-        @keyframes panMove { from { transform: scale(1.05) translateX(-2%) translateZ(0); } to { transform: scale(1.05) translateX(2%) translateZ(0); } }
-
-        /* UI 容器 */
-        #ui-container { position: absolute; bottom: 0; width: 100%; height: 35%; background: linear-gradient(transparent, rgba(0,0,0,0.85)); display: flex; justify-content: center; align-items: center; z-index: 10; pointer-events: none; }
-        #dialogue-box { width: 85%; max-width: 900px; background: var(--paper); background-image: url('https://www.transparenttextures.com/patterns/handmade-paper.png'); border: 3px double var(--gold); padding: 30px; position: relative; pointer-events: auto; cursor: pointer; box-shadow: 0 10px 50px rgba(0,0,0,0.8); }
-        #name-tag { position: absolute; top: -20px; left: 40px; background: var(--vermilion); color: white; padding: 5px 25px; font-weight: bold; font-size: 1.2rem; }
-        #text-content { font-size: 1.5rem; line-height: 1.8; color: var(--ink); min-height: 100px; }
+        #ui-container { position: absolute; bottom: 0; width: 100%; height: 35%; background: linear-gradient(transparent, rgba(0,0,0,0.9)); display: flex; justify-content: center; align-items: flex-end; padding-bottom: 30px; z-index: 10; pointer-events: none; }
+        #dialogue-box { width: 85%; max-width: 800px; background: var(--paper); border: 2px solid var(--gold); padding: 25px; position: relative; pointer-events: auto; cursor: pointer; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+        #name-tag { position: absolute; top: -18px; left: 30px; background: var(--vermilion); color: white; padding: 5px 25px; font-weight: bold; font-size: 1.1rem; }
+        #text-content { font-size: 1.4rem; line-height: 1.7; color: var(--ink); min-height: 80px; }
         
-        .fade-in-text { animation: textReveal 0.6s forwards; }
-        @keyframes textReveal { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        /* 音量与回溯控制 */
+        .controls { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 20; }
+        .volume-panel { background: var(--paper); border: 1px solid var(--gold); padding: 10px; box-shadow: 3px 3px 0 var(--gold); }
+        .vol-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; margin-bottom: 5px; }
+        .vol-row input { width: 70px; accent-color: var(--vermilion); }
+        .btn-side { padding: 5px 15px; background: var(--vermilion); color: white; border: none; cursor: pointer; font-size: 0.9rem; }
 
-        /* 右上角控制台 */
-        .controls { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 12px; z-index: 20; align-items: flex-end; }
-        .btn-side { writing-mode: vertical-rl; padding: 12px 6px; background: var(--paper); border: 1px solid var(--gold); cursor: pointer; letter-spacing: 2px; font-size: 0.9rem; box-shadow: 3px 3px 0 var(--gold); transition: 0.2s; }
-        .btn-side:active { transform: translate(2px, 2px); box-shadow: none; }
-        
-        .volume-panel { background: var(--paper); border: 1px solid var(--gold); padding: 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 3px 3px 0 var(--gold); }
-        .volume-row { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--ink); }
-        .volume-row input { cursor: pointer; accent-color: var(--vermilion); width: 80px; }
-
-        /* 遮罩层样式 */
+        #auto-timer-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: var(--vermilion); width: 0%; transition: none; }
         .overlay { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a1a; transition: opacity 1s; }
-        .title-card { background: var(--paper); padding: 50px 80px; border: 8px double var(--gold); text-align: center; }
-        .btn-main { margin-top: 30px; padding: 12px 50px; background: var(--vermilion); color: white; border: none; font-size: 1.4rem; cursor: pointer; transition: 0.3s; }
-        .btn-main:hover { background: #8e1b1b; }
-        .btn-main:disabled { background: #666; cursor: wait; }
-        
-        #end-mark { font-family: 'Ma Shan Zheng', cursive; font-size: 10rem; color: white; opacity: 0; }
-        .ink-reveal { animation: inkSpread 2.5s forwards; }
-        @keyframes inkSpread { from { opacity: 0; filter: blur(20px); transform: scale(0.9); } to { opacity: 1; filter: blur(0); transform: scale(1); } }
-
         .hidden { display: none !important; }
-
-        /* 自动计时条 */
-        #auto-timer-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: var(--vermilion); width: 0%; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <audio id="bgm" loop preload="auto"></audio>
+    <audio id="bgm" loop></audio>
 
     <div id="cover" class="overlay">
-        <div class="title-card">
-            <h1 id="cover-title" style="font-size: 3.2rem; margin: 0; letter-spacing: 12px;">载入画卷中</h1>
-            <p id="cover-subtitle" style="font-size: 1.1rem; color: #555; margin-top: 10px;"></p>
-            <button id="start-btn" class="btn-main" onclick="startExperience()" disabled>加载中 0%</button>
+        <div style="background: var(--paper); padding: 40px; border: 6px double var(--gold); text-align: center;">
+            <h1 id="cover-title" style="font-size: 2.5rem; margin: 0;">载入中</h1>
+            <p id="cover-subtitle" style="color: #666;"></p>
+            <button id="start-btn" class="btn-main" style="margin-top:20px; padding:10px 40px; background:var(--vermilion); color:white; border:none; cursor:pointer;" onclick="startExperience()" disabled>加载中 0%</button>
         </div>
     </div>
 
@@ -90,12 +91,11 @@
         <div id="black-overlay"></div>
         
         <div class="controls">
-            <button class="btn-side" onclick="prevStep()">回溯往昔</button>
             <div class="volume-panel">
-                <div class="volume-row"><span>背景音</span><input type="range" id="bgm-vol" min="0" max="1" step="0.1" value="0.3" oninput="updateVolume()"></div>
-                <div class="volume-row"><span>配音</span><input type="range" id="voice-vol" min="0" max="1" step="0.1" value="1" oninput="updateVolume()"></div>
-                <button onclick="toggleMute()" id="mute-btn" style="width: 100%; cursor: pointer; background: #eee; border: 1px solid #ccc; font-size: 12px;">全静音</button>
+                <div class="vol-row"><span>音乐</span><input type="range" id="bgm-vol" min="0" max="1" step="0.1" value="0.3" oninput="updateVol()"></div>
+                <div class="vol-row"><span>配音</span><input type="range" id="voice-vol" min="0" max="1" step="0.1" value="1" oninput="updateVol()"></div>
             </div>
+            <button class="btn-side" onclick="prevStep()">回溯往昔</button>
         </div>
 
         <div id="ui-container">
@@ -103,24 +103,20 @@
                 <div id="name-tag"></div>
                 <div id="text-content"></div>
                 <div id="auto-timer-bar"></div>
-                <div style="text-align: right; font-size: 0.75rem; color: #999; margin-top: 15px; letter-spacing: 1px;">点击画面继续</div>
             </div>
         </div>
     </div>
 
     <div id="end-layer" class="overlay hidden">
-        <div id="end-mark">完</div>
-        <button class="btn-main" style="margin-top: 50px;" onclick="location.reload()">重新启阅</button>
+        <div style="font-family: 'Ma Shan Zheng'; font-size: 10rem; color: white;">完</div>
+        <button class="btn-side" style="margin-top: 30px; scale: 1.5;" onclick="location.reload()">再看一遍</button>
     </div>
 
 <script>
-    /**
-     * 故事数据配置
-     */
     const storyBook = {
         config: { 
             title: "邹忌讽齐王纳谏",
-            subtitle: "《战国策·齐策》",
+            subtitle: "《战国策》交互绘本",
             bgm: "https://cik07-cos.7moor-fs2.com/im/4d2c3f00-7d4c-11e5-af15-41bf63ae4ea0/079e1adb4aa9a3a4/hehuan.mp3" 
         },
         scenes: [
@@ -151,26 +147,25 @@
     const voicePlayer = new Audio();
     const bgmPlayer = document.getElementById('bgm');
 
-    // 初始化画卷
     function initBook() {
-        document.title = storyBook.config.title;
         document.getElementById('cover-title').innerText = storyBook.config.title;
         document.getElementById('cover-subtitle').innerText = storyBook.config.subtitle;
         bgmPlayer.src = storyBook.config.bgm;
-        
         const container = document.getElementById('bg-container');
         storyBook.scenes.forEach((scene, index) => {
             const layer = document.createElement('div');
             layer.id = `layer-${index}`;
             layer.className = `bg-layer ${scene.motion}`;
-            layer.style.backgroundImage = `url('${scene.image}')`;
+            layer.innerHTML = `
+                <div class="bg-blur" style="background-image:url('${scene.image}')"></div>
+                <div class="bg-main" style="background-image:url('${scene.image}')"></div>
+            `;
             container.appendChild(layer);
         });
-        preloadResources();
+        preloadImages();
     }
 
-    // 预加载资源并显示进度
-    function preloadResources() {
+    function preloadImages() {
         const images = [...new Set(storyBook.scenes.map(s => s.image))];
         let loaded = 0;
         images.forEach(src => {
@@ -178,26 +173,21 @@
             img.src = src;
             img.onload = img.onerror = () => {
                 loaded++;
-                const percent = Math.floor((loaded / images.length) * 100);
                 const btn = document.getElementById('start-btn');
-                btn.innerText = `加载画卷 ${percent}%`;
-                if (loaded === images.length) {
-                    btn.disabled = false;
-                    btn.innerText = "开启画卷";
-                }
+                btn.innerText = `开启画卷 ${Math.floor(loaded/images.length*100)}%`;
+                if (loaded === images.length) { btn.disabled = false; btn.innerText = "开启画卷"; }
             };
         });
     }
 
-    // 用户交互触发播放（兼容移动端策略）
     function startExperience() {
         document.getElementById('cover').classList.add('hidden');
-        updateVolume();
-        bgmPlayer.play().catch(e => console.log("等待交互播放音频"));
+        updateVol();
+        bgmPlayer.play().catch(()=>{});
         render(true); 
     }
 
-    function updateVolume() {
+    function updateVol() {
         bgmPlayer.volume = document.getElementById('bgm-vol').value;
         voicePlayer.volume = document.getElementById('voice-vol').value;
     }
@@ -209,84 +199,56 @@
         bar.style.width = '0%';
 
         if (currentIndex >= storyBook.scenes.length) {
-            voicePlayer.pause();
             document.getElementById('end-layer').classList.remove('hidden');
-            document.getElementById('end-mark').classList.add('ink-reveal');
             return;
         }
 
         const data = storyBook.scenes[currentIndex];
-        
-        // 核心连贯性判断：只有图片变了才闪黑场切层
+        const overlay = document.getElementById('black-overlay');
+
         if (!immediate && data.image === currentImgURL) {
-            updateContent(data);
+            updateUI(data);
         } else {
             if (immediate) {
-                performLayerSwitch(data);
+                switchLayer(data);
             } else {
                 isTransitioning = true;
-                const overlay = document.getElementById('black-overlay');
                 overlay.classList.add('fading');
                 setTimeout(() => {
-                    performLayerSwitch(data);
+                    switchLayer(data);
                     overlay.classList.remove('fading');
-                    setTimeout(() => { isTransitioning = false; }, 450);
+                    setTimeout(() => isTransitioning = false, 450);
                 }, 500);
             }
         }
     }
 
-    function performLayerSwitch(data) {
+    function switchLayer(data) {
         document.querySelectorAll('.bg-layer').forEach(l => l.classList.remove('active'));
-        const activeLayer = document.getElementById(`layer-${currentIndex}`);
-        if(activeLayer) activeLayer.classList.add('active');
+        document.getElementById(`layer-${currentIndex}`).classList.add('active');
         currentImgURL = data.image;
-        updateContent(data);
+        updateUI(data);
     }
 
-    function updateContent(data) {
-        // 更新配音
+    function updateUI(data) {
         voicePlayer.pause(); 
-        if (data.voice && data.voice !== "") {
+        if (data.voice) {
             voicePlayer.src = data.voice;
-            voicePlayer.play().catch(() => {});
+            voicePlayer.play().catch(()=>{});
         } else {
-            // 无配音：启动 5s 自动跳转
             const bar = document.getElementById('auto-timer-bar');
             setTimeout(() => {
                 bar.style.transition = 'width 5s linear';
                 bar.style.width = '100%';
             }, 50);
-            autoNextTimer = setTimeout(() => { manualNext(); }, 5000);
+            autoNextTimer = setTimeout(manualNext, 5000);
         }
-
-        // 更新文本
         document.getElementById('name-tag').innerText = data.name;
-        const textEl = document.getElementById('text-content');
-        textEl.innerText = data.text;
-        textEl.classList.remove('fade-in-text');
-        void textEl.offsetWidth; // 触发重绘
-        textEl.classList.add('fade-in-text');
+        document.getElementById('text-content').innerText = data.text;
     }
 
-    function manualNext() {
-        if (isTransitioning) return;
-        currentIndex++;
-        render();
-    }
-
-    function prevStep() {
-        if (isTransitioning || currentIndex <= 0) return;
-        currentIndex--;
-        render(); 
-    }
-
-    function toggleMute() {
-        const isMuted = bgmPlayer.muted;
-        bgmPlayer.muted = !isMuted;
-        voicePlayer.muted = !isMuted;
-        document.getElementById('mute-btn').innerText = isMuted ? "全静音" : "取消静音";
-    }
+    function manualNext() { if (!isTransitioning) { currentIndex++; render(); } }
+    function prevStep() { if (!isTransitioning && currentIndex > 0) { currentIndex--; render(); } }
 
     window.onload = initBook;
 </script>
