@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>正在载入...</title>
+    <style>
+        @import url('https://fonts.font.im/css2?family=Ma+Shan+Zheng&display=swap');
+        :root { --paper: #f4ecd8; --ink: #1a1a1a; --vermilion: #b22222; --gold: #b89b5e; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Kaiti", "STKaiti", "楷体", serif; }
+
+        #viewport { position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+        /* 背景容器层 */
+        #bg-container { position: absolute; width: 100%; height: 100%; z-index: 1; }
+        .bg-layer {
+            position: absolute; width: 100%; height: 100%;
+            opacity: 0; visibility: hidden; pointer-events: none;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .bg-layer.active { opacity: 1; visibility: visible; z-index: 2; }
+
+        /* --- 核心适配逻辑 --- */
+
+        /* 默认：宽屏/横屏模式（保持 cover 充满全屏） */
+        .bg-blur { display: none; } /* 宽屏不需要模糊底 */
+        .bg-main {
+            width: 115%; height: 115%; /* 略微溢出以供动画位移 */
+            background-size: cover; 
+            background-position: center;
+            transition: opacity 0.5s;
+        }
+
+        /* 窄屏/竖屏模式（自动切换为模糊衬底 + contain） */
+        @media (max-aspect-ratio: 1/1) or (max-width: 768px) {
+            .bg-blur {
+                display: block;
+                position: absolute; width: 120%; height: 120%;
+                background-size: cover; background-position: center;
+                filter: blur(30px) brightness(0.5);
+            }
+            .bg-main {
+                width: 100%; height: 100%;
+                background-size: contain; /* 保证不被裁切 */
+                background-repeat: no-repeat;
+                z-index: 3;
+            }
+        }
+
+        /* 动画逻辑 */
+        .zoom-move .bg-main { animation: zoomMain 30s infinite alternate ease-in-out; }
+        .pan-move .bg-main { animation: panMain 30s infinite alternate ease-in-out; }
+        @keyframes zoomMain { from { transform: scale(1); } to { transform: scale(1.1); } }
+        @keyframes panMain { from { transform: translateX(-3%); } to { transform: translateX(3%); } }
+
+        /* UI 元素 */
+        #black-overlay { position: absolute; inset: 0; background: #000; opacity: 0; z-index: 5; pointer-events: none; transition: opacity 0.4s; }
+        #black-overlay.fading { opacity: 1; }
+
+        #ui-container { position: absolute; bottom: 0; width: 100%; height: 35%; background: linear-gradient(transparent, rgba(0,0,0,0.9)); display: flex; justify-content: center; align-items: flex-end; padding-bottom: 30px; z-index: 10; pointer-events: none; }
+        #dialogue-box { width: 85%; max-width: 800px; background: var(--paper); border: 2px solid var(--gold); padding: 25px; position: relative; pointer-events: auto; cursor: pointer; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+        #name-tag { position: absolute; top: -18px; left: 30px; background: var(--vermilion); color: white; padding: 5px 25px; font-weight: bold; font-size: 1.1rem; }
+        #text-content { font-size: 1.4rem; line-height: 1.7; color: var(--ink); min-height: 80px; }
+        
+        /* 音量与回溯控制 */
+        .controls { position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 20; }
+        .volume-panel { background: var(--paper); border: 1px solid var(--gold); padding: 10px; box-shadow: 3px 3px 0 var(--gold); }
+        .vol-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; margin-bottom: 5px; }
+        .vol-row input { width: 70px; accent-color: var(--vermilion); }
+        .btn-side { padding: 5px 15px; background: var(--vermilion); color: white; border: none; cursor: pointer; font-size: 0.9rem; }
+
+        #auto-timer-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: var(--vermilion); width: 0%; transition: none; }
+        .overlay { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a1a; transition: opacity 1s; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <audio id="bgm" loop></audio>
+
+    <div id="cover" class="overlay">
+        <div style="background: var(--paper); padding: 40px; border: 6px double var(--gold); text-align: center;">
+            <h1 id="cover-title" style="font-size: 2.5rem; margin: 0;">载入中</h1>
+            <p id="cover-subtitle" style="color: #666;"></p>
+            <button id="start-btn" class="btn-main" style="margin-top:20px; padding:10px 40px; background:var(--vermilion); color:white; border:none; cursor:pointer;" onclick="startExperience()" disabled>加载中 0%</button>
+        </div>
+    </div>
+
+    <div id="viewport">
+        <div id="bg-container"></div>
+        <div id="black-overlay"></div>
+        
+        <div class="controls">
+            <div class="volume-panel">
+                <div class="vol-row"><span>音乐</span><input type="range" id="bgm-vol" min="0" max="1" step="0.1" value="0.3" oninput="updateVol()"></div>
+                <div class="vol-row"><span>配音</span><input type="range" id="voice-vol" min="0" max="1" step="0.1" value="1" oninput="updateVol()"></div>
+            </div>
+            <button class="btn-side" onclick="prevStep()">回溯往昔</button>
+        </div>
+
+        <div id="ui-container">
+            <div id="dialogue-box" onclick="manualNext()">
+                <div id="name-tag"></div>
+                <div id="text-content"></div>
+                <div id="auto-timer-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="end-layer" class="overlay hidden">
+        <div style="font-family: 'Ma Shan Zheng'; font-size: 10rem; color: white;">完</div>
+        <button class="btn-side" style="margin-top: 30px; scale: 1.5;" onclick="location.reload()">再看一遍</button>
+    </div>
+
+<script>
+    const storyBook = {
+        config: { 
+            title: "邹忌讽齐王纳谏",
+            subtitle: "《战国策》交互绘本",
+            bgm: "https://cik07-cos.7moor-fs2.com/im/4d2c3f00-7d4c-11e5-af15-41bf63ae4ea0/079e1adb4aa9a3a4/hehuan.mp3" 
+        },
+        scenes: [
+            { image: "https://s.coze.cn/t/fyP2We6gw5c/", name: "旁白", text: "邹忌修八尺有余，而形貌昳丽。朝服衣冠，窥镜，谓其妻曰——", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/fyP2We6gw5c/", name: "邹忌", text: "“我孰与城北徐公美？”", voice: "", motion: "pan-move" },
+            { image: "https://s.coze.cn/t/3CKFv9v7xPM/", name: "其妻", text: "“君美甚，徐公何能及君也？”", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/aVdg2h96QvQ/", name: "邹忌", text: "忌不自信，而复问其妾曰：“吾孰与徐公美？”", voice: "", motion: "pan-move" },
+            { image: "https://s.coze.cn/t/aVdg2h96QvQ/", name: "其妾", text: "“徐公何能及君也！”", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/bi4dnxBevtg/", name: "邹忌", text: "旦日，客从外来，与坐谈，问之客曰：“吾与徐公孰美？”", voice: "", motion: "pan-move" },
+            { image: "https://s.coze.cn/t/u0dQEhyDni8/", name: "客", text: "“徐公不若君之美也。”", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/EroQ46z7MxA/", name: "旁白", text: "明日，徐公来，孰视之，自以为不如；窥镜而自视，又弗如远甚。暮寝而思之——", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/EroQ46z7MxA/", name: "邹忌", text: "“吾妻之美我者，私我也；妾之美我者，畏我也；客之美我者，欲有求于我也。”", voice: "", motion: "pan-move" },
+            { image: "https://s.coze.cn/t/ULKUDwtOfs0/", name: "旁白", text: "于是入朝见威王曰——", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/ULKUDwtOfs0/", name: "邹忌", text: "“臣诚知不如徐公美。臣之妻私臣，臣之妾畏臣，臣之客欲有求于臣，皆以美于徐公。今齐地方千里，百二十城，宫妇左右莫不私王，朝廷之臣莫不畏王，四境之内莫不有求于王：由此观之，王之蔽甚矣。”", voice: "", motion: "pan-move" },
+            { image: "https://s.coze.cn/t/hwS8S5hzNx4/", name: "齐王", text: "“善。”", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/1DjZgKrNilI/", name: "齐王", text: "“群臣吏民，能面刺寡人之过者，受上赏；上书谏寡人者，受中赏；能谤讥于市朝，闻寡人之耳者，受下赏。”", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/4uISn_w3Xmg/", name: "旁白", text: "令初下，群臣进谏，门庭若市；", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/saQgc_YC2nU/", name: "旁白", text: "数月之后，时时而间进；", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/B3Jb49B1ccQ/", name: "旁白", text: "期年之后，虽欲言，无可进者。", voice: "", motion: "zoom-move" },
+            { image: "https://s.coze.cn/t/HSvb91rEXac/", name: "旁白", text: "燕、赵、韩、魏闻之，皆朝于齐。此所谓战胜于朝廷。", voice: "", motion: "zoom-move" }
+        ]
+    };
+
+    let currentIndex = 0;
+    let isTransitioning = false;
+    let currentImgURL = ""; 
+    let autoNextTimer = null;
+    const voicePlayer = new Audio();
+    const bgmPlayer = document.getElementById('bgm');
+
+    function initBook() {
+        document.getElementById('cover-title').innerText = storyBook.config.title;
+        document.getElementById('cover-subtitle').innerText = storyBook.config.subtitle;
+        bgmPlayer.src = storyBook.config.bgm;
+        const container = document.getElementById('bg-container');
+        storyBook.scenes.forEach((scene, index) => {
+            const layer = document.createElement('div');
+            layer.id = `layer-${index}`;
+            layer.className = `bg-layer ${scene.motion}`;
+            layer.innerHTML = `
+                <div class="bg-blur" style="background-image:url('${scene.image}')"></div>
+                <div class="bg-main" style="background-image:url('${scene.image}')"></div>
+            `;
+            container.appendChild(layer);
+        });
+        preloadImages();
+    }
+
+    function preloadImages() {
+        const images = [...new Set(storyBook.scenes.map(s => s.image))];
+        let loaded = 0;
+        images.forEach(src => {
+            const img = new Image();
+            img.src = src;
+            img.onload = img.onerror = () => {
+                loaded++;
+                const btn = document.getElementById('start-btn');
+                btn.innerText = `开启画卷 ${Math.floor(loaded/images.length*100)}%`;
+                if (loaded === images.length) { btn.disabled = false; btn.innerText = "开启画卷"; }
+            };
+        });
+    }
+
+    function startExperience() {
+        document.getElementById('cover').classList.add('hidden');
+        updateVol();
+        bgmPlayer.play().catch(()=>{});
+        render(true); 
+    }
+
+    function updateVol() {
+        bgmPlayer.volume = document.getElementById('bgm-vol').value;
+        voicePlayer.volume = document.getElementById('voice-vol').value;
+    }
+
+    function render(immediate = false) {
+        clearTimeout(autoNextTimer);
+        const bar = document.getElementById('auto-timer-bar');
+        bar.style.transition = 'none';
+        bar.style.width = '0%';
+
+        if (currentIndex >= storyBook.scenes.length) {
+            document.getElementById('end-layer').classList.remove('hidden');
+            return;
+        }
+
+        const data = storyBook.scenes[currentIndex];
+        const overlay = document.getElementById('black-overlay');
+
+        if (!immediate && data.image === currentImgURL) {
+            updateUI(data);
+        } else {
+            if (immediate) {
+                switchLayer(data);
+            } else {
+                isTransitioning = true;
+                overlay.classList.add('fading');
+                setTimeout(() => {
+                    switchLayer(data);
+                    overlay.classList.remove('fading');
+                    setTimeout(() => isTransitioning = false, 450);
+                }, 500);
+            }
+        }
+    }
+
+    function switchLayer(data) {
+        document.querySelectorAll('.bg-layer').forEach(l => l.classList.remove('active'));
+        document.getElementById(`layer-${currentIndex}`).classList.add('active');
+        currentImgURL = data.image;
+        updateUI(data);
+    }
+
+    function updateUI(data) {
+        voicePlayer.pause(); 
+        if (data.voice) {
+            voicePlayer.src = data.voice;
+            voicePlayer.play().catch(()=>{});
+        } else {
+            const bar = document.getElementById('auto-timer-bar');
+            setTimeout(() => {
+                bar.style.transition = 'width 5s linear';
+                bar.style.width = '100%';
+            }, 50);
+            autoNextTimer = setTimeout(manualNext, 5000);
+        }
+        document.getElementById('name-tag').innerText = data.name;
+        document.getElementById('text-content').innerText = data.text;
+    }
+
+    function manualNext() { if (!isTransitioning) { currentIndex++; render(); } }
+    function prevStep() { if (!isTransitioning && currentIndex > 0) { currentIndex--; render(); } }
+
+    window.onload = initBook;
+</script>
+</body>
+</html>
